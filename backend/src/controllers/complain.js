@@ -1,11 +1,10 @@
-import cloudinary from "../config/cloudinary.js";
 import Complain from "../models/Complain.js";
 import { StatusCodes } from "http-status-codes";
 import Company from "../models/Company.js";
-import sgMail from "@sendgrid/mail";
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
 import axios from "axios";
+import sgMail from "@sendgrid/mail";
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 export const createComplain = async (req, res) => {
   console.log(req.body);
@@ -44,7 +43,6 @@ export const createComplain = async (req, res) => {
     let complainData = null;
 
     if (isAnonymous === true) {
-      // pinataIPFS = "https://ipfs.io/ipfs/" + pinataIPFS;
       complainData = {
         companyName: companyName,
         companyId: company._id,
@@ -75,35 +73,34 @@ export const createComplain = async (req, res) => {
     const flaskApiResponse = await axios.post(
       "http://localhost:5000/classifyDept/",
       {
-        input: description, // Provide the appropriate input data
-        depts: company.departments, // Provide the appropriate departments data
-        pinataIPFS: pinataIPFS, // Assuming you want to include pinataIPFS in the request
-      }
+        input: description,
+        depts: company.departments,
+        pinataIPFS: pinataIPFS,
+      },
     );
     console.log(flaskApiResponse.data);
 
-    // Extract relevant data from the Flask API response
     const flaskApiData = flaskApiResponse.data.result;
 
-    // Merge the data from Flask API with the complainData
     Object.assign(complainData, {
       department: flaskApiData.deptSelected,
       keywords: flaskApiData.keywords,
     });
 
-    // Create a Complain record
     const complain = await Complain.create(complainData);
     const msg = {
-      to: complain.email, // Change to your recipient
-      from: "moheetshendarkar@gmail.com", // Change to your verified sender
+      to: complain.email,
+      from: "moheetshendarkar@gmail.com",
       subject: "Your recent Case Details",
       html: `<html><h1>Company - ${complain.companyName}</h1><h5>Company ID - ${complain.companyId}</h5><h2>${complain.name}</h2><p>To view the receipt copy and paste - https://ipfs.io/ipfs/${complain.pinataIPFS}</p></html>`,
     };
-    const sendGridInfo = await sgMail.send(msg);
-    res.status(201).json({ complain });
+    await sgMail.send(msg);
+    res.status(StatusCodes.CREATED).json({ complain });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ error: error.message });
   }
 };
 
@@ -115,7 +112,7 @@ export const getAllComplain = async (req, res) => {
     // if (!complains) {
     //   throw new Error("Invalid user id");
     // }
-    res.status(200).json({ complains });
+    res.status(StatusCodes.OK).json({ complains });
   } catch (error) {
     console.log(error);
   }
@@ -128,7 +125,7 @@ export const getSingleComplain = async (req, res) => {
     if (!complain) {
       throw new Error("Invalid Complain ID");
     }
-    res.status(200).json({ complain });
+    res.status(StatusCodes.OK).json({ complain });
   } catch (error) {
     console.log(error);
   }
@@ -147,12 +144,12 @@ export const updateSingleComplain = async (req, res) => {
       },
       {
         new: true,
-      }
+      },
     );
     if (!complain) {
       throw new Error("Invalid complain ID");
     }
-    res.status(200).json({ complain });
+    res.status(StatusCodes.OK).json({ complain });
   } catch (error) {
     console.log(error);
   }
@@ -167,68 +164,67 @@ export const getAllCompanyComplain = async (req, res) => {
     // if (!complains) {
     //   throw new Error("Invalid user id");
     // }
-    res.status(200).json({ complains });
+    res.status(StatusCodes.OK).json({ complains });
   } catch (error) {
     console.log(error);
   }
 };
-
 
 export const dashboardB = async (req, res) => {
   const { companyId } = req.body;
 
   try {
     const totalComplains = await Complain.countDocuments({ companyId });
-    const resolvedComplains = await Complain.countDocuments({ companyId, status: 'resolved' });
+    const resolvedComplains = await Complain.countDocuments({
+      companyId,
+      status: "resolved",
+    });
     const pendingComplains = await Complain.countDocuments({
       companyId,
-      status: { $in: ['Submitted complain', 'In progress'] },
+      status: { $in: ["Submitted complain", "In progress"] },
     });
-
-    // Calculate average resolution time
-    // const resolutionTimes = await Complain.find({
-    //   companyId,
-    //   status: 'resolved',
-    //   resolutionTime: { $exists: true, $ne: null },
-    // }).select('resolutionTime');
-
 
     const resolvedComplaints = await Complain.find({
       companyId,
-      status: 'resolved',
+      status: "resolved",
       createdAt: { $exists: true },
       updatedAt: { $exists: true },
     });
 
-    const resolutionTimes = resolvedComplaints.map(complaint => {
+    const resolutionTimes = resolvedComplaints.map((complaint) => {
       const createdAt = complaint.createdAt.getTime();
       const updatedAt = complaint.updatedAt.getTime();
       const resolutionTimeInHours = (updatedAt - createdAt) / (1000 * 60 * 60); // Convert milliseconds to hours
       return resolutionTimeInHours;
     });
 
-    const avgResolutionTime = resolutionTimes.reduce((sum, { resolutionTime }) => sum + resolutionTime, 0) / resolutionTimes.length;
+    const avgResolutionTime =
+      resolutionTimes.reduce(
+        (sum, { resolutionTime }) => sum + resolutionTime,
+        0,
+      ) / resolutionTimes.length;
 
-    // Department-wise data
     const departmentWiseData = await Complain.aggregate([
       {
         $match: {
           companyId,
-          status: { $in: ['resolved', 'In progress', 'Submitted complain'] }
-        }
+          status: { $in: ["resolved", "In progress", "Submitted complain"] },
+        },
       },
       {
         $group: {
-          _id: '$department',
-          resolved: { $sum: { $cond: [{ $eq: ['$status', 'resolved'] }, 1, 0] } },
+          _id: "$department",
+          resolved: {
+            $sum: { $cond: [{ $eq: ["$status", "resolved"] }, 1, 0] },
+          },
           pending: {
             $sum: {
               $cond: [
-                { $in: ['$status', ['In progress', 'Submitted complain']] },
+                { $in: ["$status", ["In progress", "Submitted complain"]] },
                 1,
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
         },
       },
@@ -243,7 +239,9 @@ export const dashboardB = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ error: "Internal Server Error" });
   }
 };
 
@@ -251,15 +249,16 @@ export const getComplaintsByDepartment = async (req, res) => {
   const { companyId, department } = req.body;
 
   try {
-    // Fetch complaints based on companyId and department
     const complaints = await Complain.find({
       companyId,
       department,
     });
 
-    res.status(201).json(complaints);
+    res.status(StatusCodes.CREATED).json(complaints);
   } catch (error) {
     console.error("Error fetching complaints by department:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ error: "Internal Server Error" });
   }
 };

@@ -1,8 +1,9 @@
-import User from "../models/User.js";
+import { StatusCodes } from "http-status-codes";
 import bcrypt from "bcryptjs";
-import { createError } from "../utils/error.js";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import User from "../models/User.js";
+import { createError } from "../utils/error.js";
 
 dotenv.config();
 
@@ -14,7 +15,7 @@ export const register = async (req, res, next) => {
     if (existingUser) {
       console.log("exist");
       return res
-        .status(409)
+        .status(StatusCodes.CONFLICT)
         .json({ error: "User with this email already exists." });
     }
 
@@ -25,7 +26,7 @@ export const register = async (req, res, next) => {
       password: hash,
     });
     await newUser.save();
-    res.status(200).send("User has been created.");
+    res.status(StatusCodes.OK).send("User has been created.");
   } catch (err) {
     next(err);
   }
@@ -38,7 +39,7 @@ export const login = async (req, res, next) => {
 
     const isPasswordCorrect = await bcrypt.compare(
       req.body.password,
-      user.password
+      user.password,
     );
     if (!isPasswordCorrect) return next(createError(400, "Wrong password"));
 
@@ -50,7 +51,7 @@ export const login = async (req, res, next) => {
       process.env.JWT,
       {
         expiresIn: "30d",
-      }
+      },
     );
 
     const { password, ...userr } = user._doc;
@@ -60,7 +61,10 @@ export const login = async (req, res, next) => {
       httpOnly: false,
     };
 
-    res.status(200).cookie("access_token", token, option).json(userr);
+    res
+      .status(StatusCodes.OK)
+      .cookie("access_token", token, option)
+      .json(userr);
   } catch (err) {
     next(err);
   }
@@ -94,9 +98,11 @@ export const userVerification = (req, res, next) => {
 export const logout = async (req, res) => {
   try {
     res.cookie("access_token", " ", { expires: new Date(0) });
-    res.status(200).json({ message: "Logout successful" });
+    res.status(StatusCodes.OK).json({ message: "Logout successful" });
   } catch (error) {
     console.error("Error during logout:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ error: "Internal Server Error" });
   }
 };

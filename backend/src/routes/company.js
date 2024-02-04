@@ -1,7 +1,12 @@
 import express from "express";
+import {
+  registerCompany,
+  loginCompany,
+  companyVerification,
+  logout,
+} from "../controllers/company.js";
 
 const router = express.Router();
-import { registerCompany, loginCompany, companyVerification, logout } from "../controllers/company.js";
 
 router.post("/registerCompany", registerCompany);
 router.post("/loginCompany", loginCompany);
